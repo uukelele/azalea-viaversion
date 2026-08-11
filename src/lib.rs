@@ -204,7 +204,12 @@ impl ViaVersionPlugin {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn handle_change_address(plugin: Res<Self>, swarm: Res<Swarm>) {
+    pub fn handle_change_address(plugin: Res<Self>, swarm: Option<Res<Swarm>>) {
+        let Some(swarm) = swarm else {
+            tracing::debug!("Swarm resource not found; skipping automatic address routing.");
+            return;
+        };
+
         let ResolvedAddr { server, .. } = swarm.address.read().clone();
         let ServerAddr { host, port } = server;
 
