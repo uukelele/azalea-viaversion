@@ -31,7 +31,7 @@ use tokio::{
     net::TcpListener,
     process::Command,
 };
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 const JAVA_DOWNLOAD_URL: &str = "https://adoptium.net/installation";
 const VIA_OAUTH_VERSION: Version = Version::new(1, 0, 2);
@@ -197,9 +197,9 @@ impl ViaVersionPlugin {
                 let line = regex_replace_all!(r"(\x1b\[[0-9;]*m)", line, |_, _| "");
 
                 if line.contains("/WARN]") {
-                    println!("[ViaProxy WARN] {line}");
+                    warn!("[ViaProxy] {line}");
                 } else {
-                    println!("[ViaProxy INFO] {line}");
+                    debug!("[ViaProxy] {line}");
                 }
                 if line.contains("Finished mapping loading") {
                     let _ = tx.send(());
