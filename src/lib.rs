@@ -65,6 +65,16 @@ impl Plugin for ViaVersionPlugin {
 }
 
 impl ViaVersionPlugin {
+    /// Get the local socket address that ViaProxy is listening on.
+    pub fn bind_addr(&self) -> SocketAddr {
+        self.bind_addr
+    }
+
+    /// Get the target Minecraft version string.
+    pub fn mc_version(&self) -> &str {
+        &self.mc_version
+    }
+
     /// Download and start a ViaProxy instance.
     ///
     /// # Panics
