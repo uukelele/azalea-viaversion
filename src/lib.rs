@@ -39,30 +39,6 @@ const VIA_OAUTH_VERSION: Version = Version::new(1, 0, 2);
 // https://github.com/ViaVersion/ViaProxy/releases
 const VIA_PROXY_VERSION: Version = Version::new(3, 4, 12);
 
-/// The fallback release used when the caller requests `"auto"`/`"latest"`,
-/// which ViaProxy's `--target-version` does not accept. Prefer setting an
-/// explicit `mc_version` that matches your server; this only exists so an
-/// invalid shorthand never reaches the proxy (which otherwise fails while
-/// building its version-translation pipeline with a
-/// `NoSuchElementException: via-encoder`).
-const DEFAULT_MC_VERSION: &str = "1.21.5";
-
-/// Map the common `"auto"`/`"latest"` shorthand (and empty strings) onto an
-/// explicit, ViaProxy-supported release version. Explicit versions pass through
-/// unchanged.
-pub fn normalize_mc_version(version: &str) -> String {
-    match version.trim() {
-        "" | "auto" | "latest" => {
-            warn!(
-                "mc_version '{}' is not a concrete version; defaulting to {DEFAULT_MC_VERSION}. Set an explicit mc_version (e.g. \"1.21.5\") matching your server to avoid version-translation issues.",
-                version
-            );
-            DEFAULT_MC_VERSION.to_string()
-        }
-        v => v.to_string(),
-    }
-}
-
 #[derive(Clone, Resource)]
 pub struct ViaVersionPlugin {
     bind_addr: SocketAddr,
