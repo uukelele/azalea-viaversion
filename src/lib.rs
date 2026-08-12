@@ -197,9 +197,9 @@ impl ViaVersionPlugin {
                 let line = regex_replace_all!(r"(\x1b\[[0-9;]*m)", line, |_, _| "");
 
                 if line.contains("/WARN]") {
-                    warn!("[ViaProxy] {line}");
+                    println!("[ViaProxy WARN] {line}");
                 } else {
-                    debug!("[ViaProxy] {line}");
+                    println!("[ViaProxy INFO] {line}");
                 }
                 if line.contains("Finished mapping loading") {
                     let _ = tx.send(());
