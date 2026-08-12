@@ -30,6 +30,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
     process::Command,
+    sync::broadcast,
 };
 use tracing::{debug, error, trace, warn};
 
@@ -43,6 +44,7 @@ pub struct ViaVersionPlugin {
     bind_addr: SocketAddr,
     mc_version: String,
     proxy: Option<String>,
+    log_tx: broadcast::Sender<String>,
 }
 
 impl Plugin for ViaVersionPlugin {
@@ -75,6 +77,11 @@ impl ViaVersionPlugin {
         &self.mc_version
     }
 
+    /// Subscribe to ViaProxy log output. Each message is a formatted log line.
+    pub fn subscribe_logs(&self) -> broadcast::Receiver<String> {
+        self.log_tx.subscribe()
+    }
+
     /// Download and start a ViaProxy instance.
     ///
     /// # Panics
@@ -84,11 +91,13 @@ impl ViaVersionPlugin {
     pub async fn start(mc_version: impl ToString) -> Self {
         let bind_addr = try_find_free_addr().await.expect("Failed to bind");
         let mc_version = mc_version.to_string();
+        let (log_tx, _) = broadcast::channel(256);
 
         let plugin = Self {
             bind_addr,
             mc_version,
             proxy: None,
+            log_tx,
         };
         plugin.start_with_self().await
     }
@@ -121,11 +130,13 @@ impl ViaVersionPlugin {
     pub async fn start_with_proxy(mc_version: impl ToString, proxy: &str) -> Self {
         let bind_addr = try_find_free_addr().await.expect("Failed to bind");
         let mc_version = mc_version.to_string();
+        let (log_tx, _) = broadcast::channel(256);
 
         let plugin = Self {
             bind_addr,
             mc_version,
             proxy: Some(proxy.to_string()),
+            log_tx,
         };
         plugin.start_with_self().await
     }
@@ -183,6 +194,7 @@ impl ViaVersionPlugin {
             .expect("Failed to spawn");
 
         let (tx, mut rx) = tokio::sync::watch::channel(());
+        let log_tx = self.log_tx.clone();
         tokio::spawn(async move {
             let mut stdout = child.stdout.as_mut().expect("Failed to get stdout");
             let mut reader = BufReader::new(&mut stdout);
@@ -198,8 +210,10 @@ impl ViaVersionPlugin {
 
                 if line.contains("/WARN]") {
                     println!("[ViaProxy WARN] {line}");
+                    let _ = log_tx.send(format!("[ViaProxy WARN] {line}"));
                 } else {
                     println!("[ViaProxy INFO] {line}");
+                    let _ = log_tx.send(format!("[ViaProxy INFO] {line}"));
                 }
                 if line.contains("Finished mapping loading") {
                     let _ = tx.send(());
