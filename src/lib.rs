@@ -32,7 +32,7 @@ use tokio::{
     process::Command,
     sync::broadcast,
 };
-use tracing::{debug, error, trace, warn};
+use tracing::{error, trace, warn};
 
 const JAVA_DOWNLOAD_URL: &str = "https://adoptium.net/installation";
 const VIA_OAUTH_VERSION: Version = Version::new(1, 0, 2);
@@ -193,16 +193,28 @@ impl ViaVersionPlugin {
             .spawn()
             .expect("Failed to spawn");
 
-        let (tx, mut rx) = tokio::sync::watch::channel(());
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
         let log_tx = self.log_tx.clone();
         tokio::spawn(async move {
-            let mut stdout = child.stdout.as_mut().expect("Failed to get stdout");
-            let mut reader = BufReader::new(&mut stdout);
+            let stdout = child.stdout.take().expect("Failed to get stdout");
+            let mut reader = BufReader::new(stdout);
             let mut line = String::new();
+            let mut ready_tx = Some(ready_tx);
 
             loop {
                 line.clear();
-                reader.read_line(&mut line).await.expect("Failed to read");
+                match reader.read_line(&mut line).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(error) => {
+                        let message = format!("ViaProxy stdout read failed: {error}");
+                        let _ = log_tx.send(format!("[ViaProxy WARN] {message}"));
+                        if let Some(tx) = ready_tx.take() {
+                            let _ = tx.send(Err(message));
+                        }
+                        return;
+                    }
+                }
 
                 let line = line.trim();
                 // strip ansi escape codes
@@ -214,13 +226,27 @@ impl ViaVersionPlugin {
                     let _ = log_tx.send(format!("[ViaProxy INFO] {line}"));
                 }
                 if line.contains("Finished mapping loading") {
-                    let _ = tx.send(());
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(Ok(()));
+                    }
                 }
+            }
+
+            let message = match child.wait().await {
+                Ok(status) => format!("ViaProxy exited with status {status}"),
+                Err(error) => format!("ViaProxy stdout closed; failed to read exit status: {error}"),
+            };
+            let _ = log_tx.send(format!("[ViaProxy WARN] {message}"));
+            if let Some(tx) = ready_tx.take() {
+                let _ = tx.send(Err(message));
             }
         });
 
         /* Wait until ViaProxy is ready */
-        let _ = rx.changed().await;
+        ready_rx
+            .await
+            .expect("ViaProxy readiness task was dropped")
+            .unwrap_or_else(|error| panic!("{error}"));
 
         self
     }
